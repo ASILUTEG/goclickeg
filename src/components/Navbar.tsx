@@ -12,6 +12,7 @@ const Navbar = () => {
   const links = [
     { label: t("nav.home"), href: "/" },
     { label: t("nav.products"), href: "/#products" },
+    { label: lang === "ar" ? "خدمات التطوير" : "Dev Services", href: "/services" },
     { label: t("nav.partners"), href: "/partners" },
     { label: t("nav.about"), href: "/about" },
     { label: lang === "ar" ? "شاركنا تجربتك" : "Leave Review", href: "/leave-review" },

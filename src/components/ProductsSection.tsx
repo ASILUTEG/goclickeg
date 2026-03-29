@@ -44,15 +44,14 @@ const ProductsSection = () => {
                 }}
                 className="bg-card rounded-2xl p-6 card-elevated group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                {p.mainImage && (
-                  <div className="w-full h-48 mb-6 rounded-xl overflow-hidden bg-muted border border-border">
-                    <img 
-                      src={p.mainImage} 
-                      alt={lang === "ar" ? p.name.ar : p.name.en} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                    />
-                  </div>
-                )}
+                <div className="w-full h-48 mb-6 rounded-xl overflow-hidden bg-muted border border-border">
+                  <img 
+                    src={p.mainImage || "https://placehold.co/800x400/1e293b/94a3b8?text=No+Image"} 
+                    alt={lang === "ar" ? p.name.ar : p.name.en} 
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://placehold.co/800x400/1e293b/94a3b8?text=No+Image"; }}
+                  />
+                </div>
                 <div className="flex items-start gap-4">
                   <div className={`w-14 h-14 rounded-xl ${p.accentClassName} flex items-center justify-center flex-shrink-0`}>
                     {Icon && <Icon className="w-7 h-7" />}

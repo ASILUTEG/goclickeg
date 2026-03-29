@@ -13,7 +13,9 @@ export type ProductContent = {
   tagline: { ar: string; en: string };
   description: { ar: string; en: string };
   price: { ar: string; en: string };
+  sort_order?: number;
   youtubeId?: string;
+  youtubePlaylistUrl?: string;
   features: Array<{ ar: string; en: string }>;
   howItWorks?: Array<{ title: { ar: string; en: string }; desc: { ar: string; en: string } }>;
   trialUrl?: string;

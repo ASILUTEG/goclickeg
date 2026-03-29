@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { 
   HeartPulse, 
@@ -16,26 +16,153 @@ import {
   ShieldAlert,
   Save,
   Key,
-  MessageSquare
+  MessageSquare,
+  UserPlus,
+  Pencil,
+  Trash2,
+  Shield,
+  CheckCircle2,
+  AlertCircle,
+  ChevronUp,
+  ChevronDown,
+  Plus
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { products } from "@/content/products";
 import { ProductAdminForm } from "@/components/ProductAdminForm";
 import { ReviewAdminPanel } from "@/components/ReviewAdminPanel";
+import { ServiceAdminForm } from "@/components/ServiceAdminForm";
+import type { CustomService } from "@/components/ServiceAdminForm";
 import type { ProductContent } from "@/content/products";
+import { Globe } from "lucide-react";
 
 const Admin = () => {
   const { lang } = useLanguage();
   const { products, addProduct, updateProduct, deleteProduct } = useProducts();
+  // Language flag — declare early so all hooks below can use it
+  const isAr = lang === "ar";
+
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductContent | "new" | null>(null);
-  
-  // Login Engine State
+  const [loadingEditSlug, setLoadingEditSlug] = useState<string | null>(null);
+
+  // ── Auth State — MUST be declared before any useEffect that depends on isAuthenticated ──
   const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem("adminAuth") === "true");
   const [storedUsername, setStoredUsername] = useState(() => localStorage.getItem("adminUsername") || "admin");
-  const [storedPassword, setStoredPassword] = useState(() => localStorage.getItem("adminPassword") || "admin123");
+
+  // ── Services State ──
+  const [services, setServices] = useState<CustomService[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
+  const [editingService, setEditingService] = useState<CustomService | 'new' | null>(null);
+  const [serviceSaving, setServiceSaving] = useState(false);
+  const [loadingServiceId, setLoadingServiceId] = useState<number | null>(null);
+
+  const fetchServices = async () => {
+    setServicesLoading(true);
+    try {
+      const res = await fetch('http://localhost:3001/api/services');
+      const data = await res.json();
+      setServices(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setServicesLoading(false); }
+  };
+
+  useEffect(() => { if (isAuthenticated && activeTab === 'services') fetchServices(); }, [isAuthenticated, activeTab]);
+
+  const fetchAndEditService = async (id: number) => {
+    setLoadingServiceId(id);
+    try {
+      const res = await fetch('http://localhost:3001/api/services');
+      const data: CustomService[] = await res.json();
+      const found = data.find(s => s.id === id);
+      if (found) setEditingService(found);
+    } catch(e) { console.error(e); }
+    finally { setLoadingServiceId(null); }
+  };
+
+  const handleSaveService = async (s: CustomService) => {
+    setServiceSaving(true);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const isNew = !s.id;
+      const res = await fetch(
+        isNew ? 'http://localhost:3001/api/services' : `http://localhost:3001/api/services/${s.id}`,
+        { method: isNew ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(s) }
+      );
+      if (!res.ok) throw new Error('Save failed');
+      await fetchServices();
+      setEditingService(null);
+    } catch(e) { console.error(e); alert(isAr ? 'فشل الحفظ' : 'Save failed'); }
+    finally { setServiceSaving(false); }
+  };
+
+  const handleDeleteService = async (id: number) => {
+    if (!confirm(isAr ? 'هل أنت متأكد من حذف هذه الخدمة؟' : 'Delete this service?')) return;
+    try {
+      const token = localStorage.getItem('adminToken');
+      await fetch(`http://localhost:3001/api/services/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      setServices(prev => prev.filter(s => s.id !== id));
+    } catch(e) { console.error(e); }
+  };
+
+  // Fetch a single product fresh from DB before opening the edit form
+  const fetchAndEdit = async (slug: string) => {
+    setLoadingEditSlug(slug);
+    try {
+      const res = await fetch(`http://localhost:3001/api/products/${slug}`);
+      if (!res.ok) throw new Error('Failed to load product');
+      const data = await res.json();
+      const ICON_MAP: Record<string, any> = {
+        golab: (await import('lucide-react')).FlaskConical,
+        goclinic: (await import('lucide-react')).Stethoscope,
+        gohospital: (await import('lucide-react')).Monitor,
+      };
+      const { Package } = await import('lucide-react');
+      setEditingProduct({ ...data, icon: ICON_MAP[data.slug] || Package });
+    } catch (e) {
+      console.error(e);
+      alert(isAr ? 'فشل تحميل بيانات المنتج' : 'Failed to load product data');
+    } finally {
+      setLoadingEditSlug(null);
+    }
+  };
+
+  // Move a product up or down and persist the new order to DB
+  const reorderProducts = async (slug: string, direction: 'up' | 'down') => {
+    const sorted = [...products].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const idx = sorted.findIndex(p => p.slug === slug);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+
+    // Swap sort_order values
+    const aOrder = sorted[idx].sort_order ?? idx + 1;
+    const bOrder = sorted[swapIdx].sort_order ?? swapIdx + 1;
+    sorted[idx] = { ...sorted[idx], sort_order: bOrder };
+    sorted[swapIdx] = { ...sorted[swapIdx], sort_order: aOrder };
+
+    // Optimistically update local state via updateProduct (order field only)
+    updateProduct(sorted[idx].slug, sorted[idx]);
+    updateProduct(sorted[swapIdx].slug, sorted[swapIdx]);
+
+    // Persist to DB
+    try {
+      const token = localStorage.getItem('adminToken');
+      await fetch('http://localhost:3001/api/products/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          items: [
+            { slug: sorted[idx].slug, sort_order: bOrder },
+            { slug: sorted[swapIdx].slug, sort_order: aOrder }
+          ]
+        })
+      });
+    } catch(e) { console.error('Reorder save failed', e); }
+  };
+  
+  // Login Engine State — moved to top (above services useEffect) to avoid TDZ crash
 
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
@@ -46,8 +173,93 @@ const Admin = () => {
   const [newPassword, setNewPassword] = useState("");
   const [settingsSuccess, setSettingsSuccess] = useState(false);
 
-  // Use a pseudo-RTL logic if 'ar', but mostly standard tailwind rules
-  const isAr = lang === "ar";
+  // ── Users State ──
+  type AppUser = { id: number; username: string; role: string; created_at: string };
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState("");
+  const [userModal, setUserModal] = useState<{ mode: 'add' | 'edit'; user?: AppUser } | null>(null);
+  const [userFormData, setUserFormData] = useState({ username: '', password: '', role: 'admin' });
+  const [userFormError, setUserFormError] = useState("");
+  const [userFormSuccess, setUserFormSuccess] = useState("");
+
+  const authHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+  });
+
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    setUsersError("");
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch('http://localhost:3001/api/users', {
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setUsers(data);
+    } catch (err: any) {
+      setUsersError((isAr ? 'فشل تحميل المستخدمين: ' : 'Failed to load users: ') + (err.message || ''));
+    }
+    finally { setUsersLoading(false); }
+  }, [isAr]);
+
+  useEffect(() => { if (isAuthenticated && activeTab === 'users') fetchUsers(); }, [isAuthenticated, activeTab, fetchUsers]);
+
+  const openAddModal = () => {
+    setUserFormData({ username: '', password: '', role: 'admin' });
+    setUserFormError(''); setUserFormSuccess('');
+    setUserModal({ mode: 'add' });
+  };
+  const openEditModal = (u: AppUser) => {
+    setUserFormData({ username: u.username, password: '', role: u.role });
+    setUserFormError(''); setUserFormSuccess('');
+    setUserModal({ mode: 'edit', user: u });
+  };
+
+  const handleUserFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUserFormError(''); setUserFormSuccess('');
+    try {
+      let res: Response;
+      if (userModal?.mode === 'add') {
+        res = await fetch('http://localhost:3001/api/users', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify(userFormData)
+        });
+      } else {
+        const payload: Record<string, string> = { role: userFormData.role };
+        if (userFormData.username) payload.username = userFormData.username;
+        if (userFormData.password) payload.password = userFormData.password;
+        res = await fetch(`http://localhost:3001/api/users/${userModal!.user!.id}`, {
+          method: 'PUT', headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setUserFormSuccess(isAr ? 'تم الحفظ بنجاح!' : 'Saved successfully!');
+      fetchUsers();
+      setTimeout(() => setUserModal(null), 1200);
+    } catch (err: any) {
+      setUserFormError(err.message || (isAr ? 'حدث خطأ' : 'An error occurred'));
+    }
+  };
+
+  const handleDeleteUser = async (u: AppUser) => {
+    if (!confirm(isAr ? `هل تريد حذف المستخدم "${u.username}"؟` : `Delete user "${u.username}"?`)) return;
+    try {
+      const res = await fetch(`http://localhost:3001/api/users/${u.id}`, { method: 'DELETE', headers: authHeaders() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      fetchUsers();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // isAr is declared at top of component (before hooks)
   
   const stats = [
     { name: isAr ? "إجمالي الزيارات" : "Total Visits", value: "12,431", change: "+14.5%", trend: "up", icon: Activity },
@@ -65,42 +277,69 @@ const Admin = () => {
   const navItems = [
     { id: "dashboard", label: isAr ? "لوحة القيادة" : "Dashboard", icon: LayoutDashboard },
     { id: "products", label: isAr ? "المنتجات" : "Products", icon: PackageSearch },
+    { id: "services", label: isAr ? "الخدمات" : "Dev Services", icon: Globe },
     { id: "reviews", label: isAr ? "التقييمات" : "Reviews", icon: MessageSquare },
-    { id: "leads", label: isAr ? "العملاء المحتملين" : "Leads", icon: Users },
+    { id: "users", label: isAr ? "المستخدمون" : "Users", icon: Users },
+    { id: "leads", label: isAr ? "العملاء المحتملين" : "Leads", icon: Shield },
     { id: "settings", label: isAr ? "الإعدادات" : "Settings", icon: Settings },
   ];
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (usernameInput === storedUsername && passwordInput === storedPassword) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem("adminAuth", "true");
-      setLoginError(false);
-    } else {
+    try {
+      const res = await fetch('http://localhost:3001/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: usernameInput, password: passwordInput })
+      });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        setIsAuthenticated(true);
+        sessionStorage.setItem("adminAuth", "true");
+        localStorage.setItem("adminToken", data.token);
+        localStorage.setItem("adminUsername", usernameInput);
+        setStoredUsername(usernameInput);
+        setLoginError(false);
+      } else {
+        throw new Error(data.error);
+      }
+    } catch(err) {
       setLoginError(true);
       setTimeout(() => setLoginError(false), 3000);
     }
   };
 
-  const handleUpdateSettings = (e: React.FormEvent) => {
+  const handleUpdateSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newUsername) {
-      localStorage.setItem("adminUsername", newUsername);
-      setStoredUsername(newUsername);
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch('http://localhost:3001/api/auth/settings', {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ newUsername, newPassword })
+      });
+      if (res.ok) {
+        if (newUsername) {
+          localStorage.setItem("adminUsername", newUsername);
+          setStoredUsername(newUsername);
+        }
+        setNewUsername("");
+        setNewPassword("");
+        setSettingsSuccess(true);
+        setTimeout(() => setSettingsSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error(err);
     }
-    if (newPassword) {
-      localStorage.setItem("adminPassword", newPassword);
-      setStoredPassword(newPassword);
-    }
-    setNewUsername("");
-    setNewPassword("");
-    setSettingsSuccess(true);
-    setTimeout(() => setSettingsSuccess(false), 3000);
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem("adminAuth");
+    localStorage.removeItem("adminToken");
   };
 
   if (!isAuthenticated) {
@@ -351,52 +590,187 @@ const Admin = () => {
                   onCancel={() => setEditingProduct(null)}
                />
             ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {products.map((product) => (
-                  <div key={product.slug} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col group">
-                    {product.mainImage && (
-                      <div className="h-40 w-full overflow-hidden border-b border-border">
-                        <img 
-                          src={product.mainImage} 
-                          alt={product.name[lang as 'ar' | 'en']} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                        />
+              <div className="space-y-3">
+                {[...products]
+                  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                  .map((product, idx, arr) => (
+                  <div key={product.slug} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow flex items-stretch group">
+                    {/* Sort Controls */}
+                    <div className="flex flex-col items-center justify-center gap-1 px-3 border-r border-border bg-muted/30 py-3">
+                      <span className="text-[11px] font-bold text-muted-foreground mb-1">#{product.sort_order ?? idx + 1}</span>
+                      <button
+                        onClick={() => reorderProducts(product.slug, 'up')}
+                        disabled={idx === 0}
+                        className="p-1 rounded-md hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                        title={isAr ? 'تحريك لأعلى' : 'Move up'}
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => reorderProducts(product.slug, 'down')}
+                        disabled={idx === arr.length - 1}
+                        className="p-1 rounded-md hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                        title={isAr ? 'تحريك لأسفل' : 'Move down'}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Product Image */}
+                    <div className="w-28 flex-shrink-0 overflow-hidden border-r border-border">
+                      <img
+                        src={product.mainImage || "https://placehold.co/200x200/1e293b/94a3b8?text=No+Image"}
+                        alt={product.name[lang as 'ar' | 'en']}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://placehold.co/200x200/1e293b/94a3b8?text=No+Image"; }}
+                      />
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 p-4 flex items-center gap-4 min-w-0">
+                      <div className={`h-10 w-10 rounded-xl flex-shrink-0 flex items-center justify-center ${product.accentClassName}`}>
+                        <product.icon className="h-5 w-5" />
                       </div>
-                    )}
-                    <div className="p-6 flex items-start gap-4 border-b border-border/50 bg-muted/10 relative overflow-hidden">
-                      {/* Background Icon Decoration */}
-                      <div className="absolute right-0 top-0 opacity-5 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-500 pointer-events-none p-4">
-                        <product.icon className="h-24 w-24" />
-                      </div>
-                      
-                      <div className={`h-12 w-12 rounded-xl flex flex-shrink-0 items-center justify-center relative z-10 ${product.accentClassName}`}>
-                        <product.icon className="h-6 w-6" />
-                      </div>
-                      <div className="relative z-10 pr-6">
-                        <h3 className="text-lg font-bold text-foreground">{product.name[lang as 'ar' | 'en']}</h3>
-                        <p className="text-xs font-semibold tracking-wider text-muted-foreground mt-1">{product.type.toUpperCase()}</p>
+                      <div className="min-w-0">
+                        <h3 className="text-base font-bold text-foreground truncate">{product.name[lang as 'ar' | 'en']}</h3>
+                        <p className="text-xs font-semibold tracking-wider text-muted-foreground">{product.type.toUpperCase()}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{product.description[lang as 'ar' | 'en']}</p>
                       </div>
                     </div>
-                    <div className="p-6 flex-grow flex flex-col justify-between">
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-4 leading-relaxed">{product.description[lang as 'ar' | 'en']}</p>
-                      <div className="text-sm font-bold text-primary px-3 py-1.5 bg-primary/10 inline-block rounded-lg self-start">
-                         {product.price[lang as 'ar' | 'en']}
+
+                    {/* Price + Actions */}
+                    <div className="flex flex-col items-end justify-between p-4 border-l border-border bg-muted/10 gap-3">
+                      <span className="text-sm font-bold text-primary px-2.5 py-1 bg-primary/10 rounded-lg whitespace-nowrap">
+                        {product.price[lang as 'ar' | 'en']}
+                      </span>
+                      <div className="flex gap-2">
+                        <button onClick={() => {
+                          if (confirm(isAr ? "هل أنت متأكد من حذف هذا المنتج؟" : "Are you sure you want to delete this product?")) {
+                            deleteProduct(product.slug);
+                          }
+                        }} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
+                          {isAr ? "حذف" : "Delete"}
+                        </button>
+                        <button
+                          onClick={() => fetchAndEdit(product.slug)}
+                          disabled={loadingEditSlug === product.slug}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-60 flex items-center gap-1.5"
+                        >
+                          {loadingEditSlug === product.slug && (
+                            <span className="w-3 h-3 border-2 border-foreground/40 border-t-foreground rounded-full animate-spin" />
+                          )}
+                          {isAr ? "تعديل" : "Edit"}
+                        </button>
                       </div>
-                    </div>
-                    <div className="p-4 border-t border-border flex justify-end gap-2 bg-muted/20">
-                      <button onClick={() => {
-                        if (confirm(isAr ? "هل أنت متأكد من حذف هذا المنتج؟" : "Are you sure you want to delete this product?")) {
-                           deleteProduct(product.slug);
-                        }
-                      }} className="px-3 py-2 text-xs font-bold rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
-                        {isAr ? "حذف" : "Delete"}
-                      </button>
-                      <button onClick={() => setEditingProduct(product)} className="px-4 py-2 text-xs font-bold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors">
-                        {isAr ? "تعديل" : "Edit"}
-                      </button>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Services Tab */}
+        {activeTab === "services" && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">{isAr ? "خدمات التطوير" : "Development Services"}</h2>
+                <p className="text-sm text-muted-foreground mt-1">{isAr ? "إدارة خدمات تطوير المواقع والتطبيقات" : "Manage website, desktop and mobile development services"}</p>
+              </div>
+              {!editingService && (
+                <button onClick={() => setEditingService('new')}
+                  className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold shadow hover:bg-primary/90 transition-colors">
+                  <Plus className="w-4 h-4" />
+                  {isAr ? "إضافة خدمة" : "Add Service"}
+                </button>
+              )}
+            </div>
+
+            {editingService ? (
+              <ServiceAdminForm
+                service={editingService === 'new' ? null : editingService}
+                saving={serviceSaving}
+                onSave={handleSaveService}
+                onCancel={() => setEditingService(null)}
+              />
+            ) : (
+              <div className="space-y-3">
+                {servicesLoading ? (
+                  <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    {isAr ? 'جاري التحميل...' : 'Loading...'}
+                  </div>
+                ) : services.length === 0 ? (
+                  <div className="text-center py-16 text-muted-foreground">{isAr ? 'لا توجد خدمات بعد' : 'No services yet'}</div>
+                ) : (
+                  services.map(s => {
+                    const TYPE_ICON: Record<string, any> = { website: Globe, desktop: Pencil, mobile: Pencil };
+                    const TYPE_COLOR: Record<string, string> = {
+                      website: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+                      desktop: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
+                      mobile: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+                    };
+                    const TYPE_LABEL: Record<string, string> = {
+                      website: isAr ? 'موقع ويب' : 'Website',
+                      desktop: isAr ? 'سطح المكتب' : 'Desktop',
+                      mobile: isAr ? 'جوال' : 'Mobile',
+                    };
+                    return (
+                      <div key={s.id} className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow flex items-stretch group">
+                        {/* Image */}
+                        <div className="w-28 flex-shrink-0 overflow-hidden border-e border-border">
+                          <img
+                            src={s.mainImage || 'https://placehold.co/200x200/1e293b/94a3b8?text=Svc'}
+                            alt={s.name[lang as 'ar' | 'en']}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/200x200/1e293b/94a3b8?text=Svc'; }}
+                          />
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 p-4 flex items-center gap-4 min-w-0">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${TYPE_COLOR[s.type]}`}>
+                                {TYPE_LABEL[s.type]}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                s.is_active ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-muted text-muted-foreground border border-border'
+                              }`}>
+                                {s.is_active ? (isAr ? 'مفعّل' : 'Active') : (isAr ? 'مخفي' : 'Hidden')}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground font-mono">#{s.sort_order}</span>
+                            </div>
+                            <h3 className="font-bold text-foreground truncate">{s.name[lang as 'ar' | 'en']}</h3>
+                            <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{s.description[lang as 'ar' | 'en']}</p>
+                          </div>
+                        </div>
+
+                        {/* Price + Actions */}
+                        <div className="flex flex-col items-end justify-between p-4 border-s border-border bg-muted/10 gap-3">
+                          <span className="text-sm font-bold text-primary px-2.5 py-1 bg-primary/10 rounded-lg whitespace-nowrap">
+                            {s.price[lang as 'ar' | 'en']}
+                          </span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleDeleteService(s.id!)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">
+                              {isAr ? 'حذف' : 'Delete'}
+                            </button>
+                            <button
+                              onClick={() => fetchAndEditService(s.id!)}
+                              disabled={loadingServiceId === s.id}
+                              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-border bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-60 flex items-center gap-1.5">
+                              {loadingServiceId === s.id && <span className="w-3 h-3 border-2 border-foreground/40 border-t-foreground rounded-full animate-spin" />}
+                              {isAr ? 'تعديل' : 'Edit'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
           </div>
@@ -470,8 +844,172 @@ const Admin = () => {
         {/* Active Tab Condition checks */}
         {activeTab === "reviews" && <ReviewAdminPanel />}
 
+        {/* Users Tab */}
+        {activeTab === "users" && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">{isAr ? "إدارة المستخدمين" : "User Management"}</h2>
+                <p className="text-sm text-muted-foreground mt-1">{isAr ? "إضافة أو تعديل أو حذف حسابات المستخدمين" : "Add, edit or remove admin accounts"}</p>
+              </div>
+              <button
+                onClick={openAddModal}
+                className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-semibold shadow hover:bg-primary/90 transition-colors"
+              >
+                <UserPlus className="w-4 h-4" />
+                {isAr ? "إضافة مستخدم" : "Add User"}
+              </button>
+            </div>
+
+            {usersError && (
+              <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-3 rounded-xl border border-destructive/20 text-sm font-medium">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />{usersError}
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground uppercase bg-muted/30 border-b border-border">
+                    <tr>
+                      <th className="px-6 py-4 font-medium">#</th>
+                      <th className="px-6 py-4 font-medium">{isAr ? "اسم المستخدم" : "Username"}</th>
+                      <th className="px-6 py-4 font-medium">{isAr ? "الصلاحية" : "Role"}</th>
+                      <th className="px-6 py-4 font-medium">{isAr ? "تاريخ الإنشاء" : "Created At"}</th>
+                      <th className="px-6 py-4 font-medium text-center">{isAr ? "إجراءات" : "Actions"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usersLoading ? (
+                      <tr><td colSpan={5} className="px-6 py-10 text-center text-muted-foreground">
+                        <div className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />{isAr ? 'جاري التحميل...' : 'Loading...'}</div>
+                      </td></tr>
+                    ) : users.length === 0 ? (
+                      <tr><td colSpan={5} className="px-6 py-10 text-center text-muted-foreground">{isAr ? 'لا يوجد مستخدمون' : 'No users found'}</td></tr>
+                    ) : users.map((u) => (
+                      <tr key={u.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                        <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{u.id}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                              {u.username.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-semibold text-foreground">{u.username}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            u.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                          }`}>{u.role}</span>
+                        </td>
+                        <td className="px-6 py-4 text-muted-foreground text-xs">
+                          {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => openEditModal(u)}
+                              className="p-2 rounded-lg bg-muted hover:bg-primary/10 hover:text-primary text-muted-foreground transition-colors"
+                              title={isAr ? 'تعديل' : 'Edit'}
+                            ><Pencil className="w-4 h-4" /></button>
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-2 rounded-lg bg-muted hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors"
+                              title={isAr ? 'حذف' : 'Delete'}
+                            ><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* User Modal */}
+        {userModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 mx-4">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-bold text-foreground">
+                  {userModal.mode === 'add'
+                    ? (isAr ? 'إضافة مستخدم جديد' : 'Add New User')
+                    : (isAr ? 'تعديل المستخدم' : 'Edit User')}
+                </h3>
+                <button onClick={() => setUserModal(null)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="w-5 h-5" /></button>
+              </div>
+              <form onSubmit={handleUserFormSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">{isAr ? 'اسم المستخدم' : 'Username'}</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={userFormData.username}
+                      onChange={e => setUserFormData(p => ({ ...p, username: e.target.value }))}
+                      placeholder={userModal.mode === 'edit' ? (isAr ? 'اتركه فارغاً للإبقاء على الحالي' : 'Leave blank to keep current') : ''}
+                      required={userModal.mode === 'add'}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-background text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">{isAr ? 'كلمة المرور' : 'Password'}</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="password"
+                      value={userFormData.password}
+                      onChange={e => setUserFormData(p => ({ ...p, password: e.target.value }))}
+                      placeholder={userModal.mode === 'edit' ? (isAr ? 'اتركه فارغاً للإبقاء على الحالي' : 'Leave blank to keep current') : ''}
+                      required={userModal.mode === 'add'}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-input bg-background text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-1.5">{isAr ? 'الصلاحية' : 'Role'}</label>
+                  <select
+                    value={userFormData.role}
+                    onChange={e => setUserFormData(p => ({ ...p, role: e.target.value }))}
+                    className="w-full px-4 py-2.5 rounded-xl border border-input bg-background text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition"
+                  >
+                    <option value="admin">admin</option>
+                    <option value="viewer">viewer</option>
+                    <option value="editor">editor</option>
+                  </select>
+                </div>
+
+                {userFormError && (
+                  <div className="flex items-center gap-2 text-destructive bg-destructive/10 p-2.5 rounded-xl border border-destructive/20 text-sm">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />{userFormError}
+                  </div>
+                )}
+                {userFormSuccess && (
+                  <div className="flex items-center gap-2 text-emerald-600 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20 text-sm font-semibold">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />{userFormSuccess}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setUserModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-muted transition-colors">
+                    {isAr ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button type="submit"
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-colors shadow">
+                    <Save className="w-4 h-4" />{isAr ? 'حفظ' : 'Save'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Placeholder for other tabs */}
-        {activeTab !== "dashboard" && activeTab !== "products" && activeTab !== "settings" && activeTab !== "reviews" && (
+        {activeTab !== "dashboard" && activeTab !== "products" && activeTab !== "services" && activeTab !== "settings" && activeTab !== "reviews" && activeTab !== "users" && (
           <div className="flex flex-col items-center justify-center h-[50vh] animate-in fade-in zoom-in-95 duration-500">
             <div className="w-20 h-20 mb-6 text-muted border border-border/50 rounded-full flex items-center justify-center bg-card shadow-sm">
               <Settings className="w-10 h-10 animate-[spin_4s_linear_infinite]" />

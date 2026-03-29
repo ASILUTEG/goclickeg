@@ -14,6 +14,12 @@ function buildWhatsAppUrl(number: string, message?: string) {
   return `https://wa.me/${digits}${text}`;
 }
 
+function extractPlaylistId(url: string | undefined): string | null {
+  if (!url) return null;
+  const match = url.match(/[?&]list=([^&]+)/);
+  return match ? match[1] : null;
+}
+
 function buildFacebookPagePluginUrl(pageUrl: string) {
   const params = new URLSearchParams({
     href: pageUrl,
@@ -152,17 +158,14 @@ const ProductPage = () => {
                       allowFullScreen
                     />
                   </div>
-                ) : product.mainImage ? (
+                ) : (
                   <div className="aspect-video overflow-hidden rounded-xl bg-muted">
                     <img 
-                      src={product.mainImage} 
+                      src={product.mainImage || "https://placehold.co/800x450/1e293b/94a3b8?text=No+Image"} 
                       alt={title} 
-                      className="w-full h-full object-cover" 
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://placehold.co/800x450/1e293b/94a3b8?text=No+Image"; }}
                     />
-                  </div>
-                ) : (
-                  <div className="aspect-video rounded-xl bg-muted flex items-center justify-center text-muted-foreground text-sm">
-                    {lang === "ar" ? "ضع فيديو الديمو هنا (YouTube)" : "Demo video goes here (YouTube)"}
                   </div>
                 )}
               </div>
@@ -219,6 +222,35 @@ const ProductPage = () => {
                     <p className="text-sm text-muted-foreground leading-relaxed">{s.desc[lang]}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {!!extractPlaylistId(product.youtubePlaylistUrl) && (
+          <section className="py-14 bg-muted/20">
+            <div className="container mx-auto px-4">
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-foreground mb-2">
+                  {lang === "ar" ? "كيفية استخدام التطبيق" : "How to use the app"}
+                </h2>
+                <p className="text-muted-foreground">
+                  {lang === "ar"
+                    ? "قائمة تشغيل توضح لك كيفية استخدام النظام خطوة بخطوة."
+                    : "A comprehensive video playlist on how to use the system step by step."}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-4 card-elevated">
+                <div className="aspect-video overflow-hidden rounded-xl bg-muted">
+                  <iframe
+                    className="h-full w-full"
+                    src={`https://www.youtube-nocookie.com/embed/videoseries?list=${extractPlaylistId(product.youtubePlaylistUrl)}`}
+                    title="How to use playlist"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
               </div>
             </div>
           </section>
@@ -344,10 +376,11 @@ const ProductPage = () => {
                     <div className="flex items-center gap-4">
                       <div className="h-14 w-14 rounded-xl border border-border bg-muted overflow-hidden flex items-center justify-center flex-shrink-0">
                         <img
-                          src={p.imageSrc}
+                          src={p.imageSrc || "https://placehold.co/200x200/e2e8f0/94a3b8?text=Partner"}
                           alt={p.title[lang]}
                           loading="lazy"
                           className="h-full w-full object-cover"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://placehold.co/200x200/e2e8f0/94a3b8?text=Partner"; }}
                         />
                       </div>
                       <div className="min-w-0">

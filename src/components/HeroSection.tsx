@@ -7,20 +7,12 @@ const HeroSection = () => {
 
   return (
     <section id="home" className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Video Background */}
-      <video
-        autoPlay
-        muted
-        loop
-        playsInline
+      {/* Background Image */}
+      <img
+        src="/hero-image.jpg"
+        alt="Hero Background"
         className="absolute inset-0 w-full h-full object-cover"
-        poster="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1920&q=80"
-      >
-        <source
-          src="https://cdn.coverr.co/videos/coverr-medical-technology-4736/1080p.mp4"
-          type="video/mp4"
-        />
-      </video>
+      />
 
       {/* Overlay */}
       <div className="absolute inset-0 hero-overlay" />

@@ -13,13 +13,14 @@ import Partners from "./pages/Partners.tsx";
 import About from "./pages/About.tsx";
 import LeaveReview from "./pages/LeaveReview.tsx";
 import Admin from "./pages/Admin.tsx";
+import ServicesPage from "./pages/ServicesPage.tsx";
 import { ProductProvider } from "@/contexts/ProductContext";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="system" storageKey="goclick-theme">
+    <ThemeProvider defaultTheme="dark" storageKey="goclick-theme">
       <TooltipProvider>
         <LanguageProvider>
           <ProductProvider>
@@ -33,6 +34,7 @@ const App = () => (
                 <Route path="/partners" element={<Partners />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/leave-review" element={<LeaveReview />} />
+                <Route path="/services" element={<ServicesPage />} />
                 <Route path="/:slug" element={<ProductPage />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

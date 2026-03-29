@@ -24,65 +24,71 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     setMounted(true);
-    const saved = localStorage.getItem("meditech-products");
-    if (saved) {
+    
+    const loadFromAPI = async () => {
       try {
-        const parsed: typeof initialProducts = JSON.parse(saved);
-        // Hydrate icons and fallback main images
-        const hydrated = parsed.map(p => {
-          // Replace placeholders in partners
-          const validImageIds = [
-            "1519494026892-80bbd2d6fd0d",
-            "1538108149393-fbbd81895907",
-            "1586773860418-d37222d8fce3",
-            "1551076805-e1869043e560",
-            "1576091160550-2173dba999ef",
-            "1631815589968-fdb09a223b1e"
-          ];
-          
-          const hydratedPartners = p.partners?.map((pt, i) => ({
-            ...pt,
-            imageSrc: pt.imageSrc === "/placeholder.svg" 
-              ? `https://images.unsplash.com/photo-${validImageIds[i % validImageIds.length]}?w=200&h=200&fit=crop` 
-              : pt.imageSrc
-          }));
-
-          return {
+        const res = await fetch("http://localhost:3001/api/products");
+        if (res.ok) {
+          const data = await res.json();
+          const hydrated = data.map((p: any) => ({
             ...p,
-            partners: hydratedPartners,
-            icon: ICON_MAP[p.slug] || Package,
-            mainImage: p.mainImage || "https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?q=80&w=800"
-          };
-        });
-        setProducts(hydrated);
+            icon: ICON_MAP[p.slug] || Package
+          }));
+          setProducts(hydrated);
+        }
       } catch (e) {
-        console.error("Failed to parse local storage products", e);
+        console.error("Failed to load products from API", e);
       }
-    }
+    };
+
+    loadFromAPI();
   }, []);
 
-  const saveToStorage = (newProducts: ProductContent[]) => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const serializable = newProducts.map(({ icon, ...rest }) => rest);
-    localStorage.setItem("meditech-products", JSON.stringify(serializable));
-    setProducts(newProducts);
-  };
-
-  const addProduct = (p: ProductContent) => {
+  const addProduct = async (p: ProductContent) => {
     const withIcon = { ...p, icon: ICON_MAP[p.slug] || Package };
-    saveToStorage([...products, withIcon]);
+    setProducts(prev => [...prev, withIcon]);
+    try {
+      const token = localStorage.getItem('adminToken');
+      await fetch("http://localhost:3001/api/products", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(p)
+      });
+    } catch(e) { console.error(e); }
   };
 
-  const updateProduct = (slug: string, p: ProductContent) => {
+  const updateProduct = async (slug: string, p: ProductContent) => {
     const withIcon = { ...p, icon: ICON_MAP[p.slug] || Package };
-    saveToStorage(products.map(prod => prod.slug === slug ? withIcon : prod));
+    setProducts(prev => prev.map(prod => prod.slug === slug ? withIcon : prod));
+    try {
+      const token = localStorage.getItem('adminToken');
+      await fetch(`http://localhost:3001/api/products/${slug}`, {
+        method: "PUT",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(p)
+      });
+    } catch(e) { console.error(e); }
   };
 
-  const deleteProduct = (slug: string) => {
-    saveToStorage(products.filter(prod => prod.slug !== slug));
+  const deleteProduct = async (slug: string) => {
+    setProducts(prev => prev.filter(prod => prod.slug !== slug));
+    try {
+      const token = localStorage.getItem('adminToken');
+      await fetch(`http://localhost:3001/api/products/${slug}`, { 
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+    } catch(e) { console.error(e); }
   };
-  const addReview = (slug: string, review: { name: string, title?: string, quote: string }) => {
-    saveToStorage(products.map(p => {
+
+  const addReview = async (slug: string, review: { name: string, title?: string, quote: string }) => {
+    setProducts(prev => prev.map(p => {
       if (p.slug === slug) {
         return {
           ...p,
@@ -98,6 +104,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return p;
     }));
+
+    try {
+      await fetch(`http://localhost:3001/api/products/${slug}/reviews`, {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify(review)
+      });
+    } catch(e) { console.error(e); }
   };
 
   if (!mounted) {

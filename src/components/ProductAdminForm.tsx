@@ -21,12 +21,14 @@ const emptyProduct: ProductContent = {
   tagline: { ar: "", en: "" },
   description: { ar: "", en: "" },
   price: { ar: "", en: "" },
+  sort_order: 0,
   mainImage: "",
   features: [],
   partners: [],
   images: [],
   success: [],
   youtubeId: "",
+  youtubePlaylistUrl: "",
 };
 
 export function ProductAdminForm({ product, onSave, onCancel }: Props) {
@@ -99,6 +101,18 @@ export function ProductAdminForm({ product, onSave, onCancel }: Props) {
             <label className="text-sm font-semibold">{isAr ? "السعر (إنجليزي)" : "Price (EN)"}</label>
             <input required value={formData.price.en} onChange={e => updateField('price', 'en', e.target.value)} className="w-full p-2.5 rounded-xl border border-input bg-background" />
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">{isAr ? "ترتيب العرض" : "Display Order"}</label>
+            <input
+              type="number"
+              min={0}
+              value={formData.sort_order ?? 0}
+              onChange={e => setFormData(p => ({ ...p, sort_order: parseInt(e.target.value) || 0 }))}
+              className="w-full p-2.5 rounded-xl border border-input bg-background"
+            />
+            <p className="text-xs text-muted-foreground">{isAr ? "رقم أصغر = يظهر أولاً" : "Lower number = appears first"}</p>
+          </div>
           
           <div className="space-y-2">
             <label className="text-sm font-semibold">{isAr ? "الصورة الرئيسية (اختياري)" : "Main Image URL (Optional)"}</label>
@@ -121,6 +135,15 @@ export function ProductAdminForm({ product, onSave, onCancel }: Props) {
                 else if (val.includes('youtu.be/')) id = val.split('youtu.be/')[1].split('?')[0];
                 setFormData(p => ({...p, youtubeId: id || undefined}));
               }} 
+              className="w-full p-2.5 rounded-xl border border-input bg-background" 
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">{isAr ? "رابط قائمة تشغيل الشرح (اختياري)" : "Tutorial Playlist URL (Optional)"}</label>
+            <input 
+              placeholder="https://www.youtube.com/playlist?list=..."
+              value={formData.youtubePlaylistUrl || ""} 
+              onChange={e => setFormData(p => ({...p, youtubePlaylistUrl: e.target.value}))} 
               className="w-full p-2.5 rounded-xl border border-input bg-background" 
             />
           </div>
