@@ -1,9 +1,28 @@
 import { useState } from "react";
 import type { ProductContent } from "@/content/products";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Save, X, Plus, Trash } from "lucide-react";
+import { Save, X, Plus, Trash, Youtube } from "lucide-react";
 import { ImageUploadInput } from "./ImageUploadInput";
 import { FileUploadInput } from "./FileUploadInput";
+
+function parseYoutubeVideoOrPlaylist(url: string | undefined): { type: "video" | "playlist"; id: string } | null {
+  if (!url) return null;
+  const trimmedUrl = url.trim();
+
+  const listMatch = trimmedUrl.match(/[?&]list=([^&]+)/);
+  if (listMatch) return { type: "playlist", id: listMatch[1] };
+
+  const videoMatch = trimmedUrl.match(/[?&]v=([^&]+)/) || trimmedUrl.match(/youtu\.be\/([^?&]+)/) || trimmedUrl.match(/youtube\.com\/embed\/([^?&]+)/);
+  if (videoMatch) return { type: "video", id: videoMatch[1] };
+
+  if (/^[a-zA-Z0-9_-]{12,}$/.test(trimmedUrl)) {
+    return { type: "playlist", id: trimmedUrl };
+  } else if (/^[a-zA-Z0-9_-]{10,11}$/.test(trimmedUrl)) {
+    return { type: "video", id: trimmedUrl };
+  }
+
+  return null;
+}
 
 type Props = {
   product?: ProductContent | null;
@@ -139,13 +158,40 @@ export function ProductAdminForm({ product, onSave, onCancel }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-semibold">{isAr ? "رابط قائمة تشغيل الشرح (اختياري)" : "Tutorial Playlist URL (Optional)"}</label>
+            <label className="text-sm font-semibold flex items-center gap-1.5">
+              <Youtube className="w-4 h-4 text-red-500" />
+              {isAr ? "رابط قائمة تشغيل الشرح (اختياري)" : "Tutorial Playlist URL (Optional)"}
+            </label>
             <input 
-              placeholder="https://www.youtube.com/playlist?list=..."
+              placeholder="https://www.youtube.com/playlist?list=PLxxxxxx"
               value={formData.youtubePlaylistUrl || ""} 
               onChange={e => setFormData(p => ({...p, youtubePlaylistUrl: e.target.value}))} 
               className="w-full p-2.5 rounded-xl border border-input bg-background" 
             />
+            {parseYoutubeVideoOrPlaylist(formData.youtubePlaylistUrl || "") ? (
+              <div className="space-y-3">
+                <p className="text-xs flex items-center gap-1.5 text-emerald-500 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                  {isAr ? "✓ تم اكتشاف المعرف:" : "✓ Video/Playlist ID detected:"} <code className="font-mono bg-emerald-500/10 px-1 rounded">{parseYoutubeVideoOrPlaylist(formData.youtubePlaylistUrl || "")?.id}</code>
+                </p>
+                <div className="aspect-video rounded-xl overflow-hidden border border-border bg-muted/30">
+                  <iframe
+                    className="w-full h-full"
+                    src={
+                      parseYoutubeVideoOrPlaylist(formData.youtubePlaylistUrl || "")?.type === "playlist"
+                        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${parseYoutubeVideoOrPlaylist(formData.youtubePlaylistUrl || "")?.id}&rel=0&modestbranding=1`
+                        : `https://www.youtube-nocookie.com/embed/${parseYoutubeVideoOrPlaylist(formData.youtubePlaylistUrl || "")?.id}?rel=0&modestbranding=1`
+                    }
+                    title="Playlist Preview"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {isAr ? "مثال: https://www.youtube.com/playlist?list=PLxxxxxx" : "Example: https://www.youtube.com/playlist?list=PLxxxxxx"}
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold">{isAr ? "رابط صفحة فيس بوك" : "Facebook Page URL"}</label>

@@ -49,6 +49,7 @@ export const ImageUploadInput: React.FC<Props> = ({ value, onChange, placeholder
 
           // Use WebP compression with 0.7 quality for aggressive space-saving
           const compressedDataUrl = canvas.toDataURL("image/webp", 0.7);
+          console.log("Generated Base64 Length:", compressedDataUrl.length);
           onChange(compressedDataUrl);
         }
       };

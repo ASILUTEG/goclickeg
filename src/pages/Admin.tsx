@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_BASE } from "@/lib/api";
 import { Link } from "react-router-dom";
 import { 
   HeartPulse, 
@@ -25,7 +26,9 @@ import {
   AlertCircle,
   ChevronUp,
   ChevronDown,
-  Plus
+  Plus,
+  Youtube,
+  PlayCircle
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useProducts } from "@/contexts/ProductContext";
@@ -62,7 +65,7 @@ const Admin = () => {
   const fetchServices = async () => {
     setServicesLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/services');
+      const res = await fetch(`${API_BASE}/services`);
       const data = await res.json();
       setServices(Array.isArray(data) ? data : []);
     } catch(e) { console.error(e); }
@@ -74,7 +77,7 @@ const Admin = () => {
   const fetchAndEditService = async (id: number) => {
     setLoadingServiceId(id);
     try {
-      const res = await fetch('http://localhost:3001/api/services');
+      const res = await fetch(`${API_BASE}/services`);
       const data: CustomService[] = await res.json();
       const found = data.find(s => s.id === id);
       if (found) setEditingService(found);
@@ -88,7 +91,7 @@ const Admin = () => {
       const token = localStorage.getItem('adminToken');
       const isNew = !s.id;
       const res = await fetch(
-        isNew ? 'http://localhost:3001/api/services' : `http://localhost:3001/api/services/${s.id}`,
+        isNew ? `${API_BASE}/services` : `${API_BASE}/services/${s.id}`,
         { method: isNew ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(s) }
       );
       if (!res.ok) throw new Error('Save failed');
@@ -102,7 +105,7 @@ const Admin = () => {
     if (!confirm(isAr ? 'هل أنت متأكد من حذف هذه الخدمة؟' : 'Delete this service?')) return;
     try {
       const token = localStorage.getItem('adminToken');
-      await fetch(`http://localhost:3001/api/services/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+      await fetch(`${API_BASE}/services/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
       setServices(prev => prev.filter(s => s.id !== id));
     } catch(e) { console.error(e); }
   };
@@ -111,7 +114,7 @@ const Admin = () => {
   const fetchAndEdit = async (slug: string) => {
     setLoadingEditSlug(slug);
     try {
-      const res = await fetch(`http://localhost:3001/api/products/${slug}`);
+      const res = await fetch(`${API_BASE}/products/${slug}`);
       if (!res.ok) throw new Error('Failed to load product');
       const data = await res.json();
       const ICON_MAP: Record<string, any> = {
@@ -149,7 +152,7 @@ const Admin = () => {
     // Persist to DB
     try {
       const token = localStorage.getItem('adminToken');
-      await fetch('http://localhost:3001/api/products/reorder', {
+      await fetch(`${API_BASE}/products/reorder`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -193,7 +196,7 @@ const Admin = () => {
     setUsersError("");
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch('http://localhost:3001/api/users', {
+      const res = await fetch(`${API_BASE}/users`, {
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -224,7 +227,7 @@ const Admin = () => {
     try {
       let res: Response;
       if (userModal?.mode === 'add') {
-        res = await fetch('http://localhost:3001/api/users', {
+        res = await fetch(`${API_BASE}/users`, {
           method: 'POST', headers: authHeaders(),
           body: JSON.stringify(userFormData)
         });
@@ -232,7 +235,7 @@ const Admin = () => {
         const payload: Record<string, string> = { role: userFormData.role };
         if (userFormData.username) payload.username = userFormData.username;
         if (userFormData.password) payload.password = userFormData.password;
-        res = await fetch(`http://localhost:3001/api/users/${userModal!.user!.id}`, {
+        res = await fetch(`${API_BASE}/users/${userModal!.user!.id}`, {
           method: 'PUT', headers: authHeaders(),
           body: JSON.stringify(payload)
         });
@@ -250,7 +253,7 @@ const Admin = () => {
   const handleDeleteUser = async (u: AppUser) => {
     if (!confirm(isAr ? `هل تريد حذف المستخدم "${u.username}"؟` : `Delete user "${u.username}"?`)) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/users/${u.id}`, { method: 'DELETE', headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/users/${u.id}`, { method: 'DELETE', headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       fetchUsers();
@@ -287,7 +290,7 @@ const Admin = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:3001/api/auth/login', {
+      const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: usernameInput, password: passwordInput })
@@ -313,7 +316,7 @@ const Admin = () => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch('http://localhost:3001/api/auth/settings', {
+      const res = await fetch(`${API_BASE}/auth/settings`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -633,8 +636,22 @@ const Admin = () => {
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-base font-bold text-foreground truncate">{product.name[lang as 'ar' | 'en']}</h3>
-                        <p className="text-xs font-semibold tracking-wider text-muted-foreground">{product.type.toUpperCase()}</p>
-                        <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{product.description[lang as 'ar' | 'en']}</p>
+                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">{product.type}</p>
+                          {product.youtubePlaylistUrl && (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-red-500/10 text-red-500 text-[10px] font-bold border border-red-500/20">
+                              <Youtube className="w-3 h-3" />
+                              {isAr ? "قائمة تشغيل" : "Playlist"}
+                            </span>
+                          )}
+                          {product.youtubeId && (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-500 text-[10px] font-bold border border-blue-500/20">
+                              <PlayCircle className="w-3 h-3" />
+                              {isAr ? "شرح" : "Demo"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-1 mt-1">{product.description[lang as 'ar' | 'en']}</p>
                       </div>
                     </div>
 

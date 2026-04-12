@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { motion } from "framer-motion";
 import Navbar from "@/components/Navbar";
@@ -72,7 +73,7 @@ const ServicesPage = () => {
   const [activeType, setActiveType] = useState<string>("all");
 
   useEffect(() => {
-    fetch("http://localhost:3001/api/services")
+    fetch(`${API_BASE}/services`)
       .then(r => r.json())
       .then(data => setServices(Array.isArray(data) ? data.filter(s => s.is_active) : []))
       .catch(console.error)

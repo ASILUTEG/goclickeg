@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Download, MessageCircle, ArrowRight, BadgeCheck, Facebook } from "lucide-react";
+import { Download, MessageCircle, ArrowRight, BadgeCheck, Facebook, Youtube, PlayCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import WhatsAppButton from "@/components/WhatsAppButton";
@@ -14,10 +14,26 @@ function buildWhatsAppUrl(number: string, message?: string) {
   return `https://wa.me/${digits}${text}`;
 }
 
-function extractPlaylistId(url: string | undefined): string | null {
+function parseYoutubeVideoOrPlaylist(url: string | undefined): { type: "video" | "playlist"; id: string } | null {
   if (!url) return null;
-  const match = url.match(/[?&]list=([^&]+)/);
-  return match ? match[1] : null;
+  const trimmedUrl = url.trim();
+
+  // 1. Try to extract playlist from URL params
+  const listMatch = trimmedUrl.match(/[?&]list=([^&]+)/);
+  if (listMatch) return { type: "playlist", id: listMatch[1] };
+
+  // 2. Try to extract single video from URL params
+  const videoMatch = trimmedUrl.match(/[?&]v=([^&]+)/) || trimmedUrl.match(/youtu\.be\/([^?&]+)/) || trimmedUrl.match(/youtube\.com\/embed\/([^?&]+)/);
+  if (videoMatch) return { type: "video", id: videoMatch[1] };
+
+  // 3. Assume ID (either video 11 chars, or playlist 12+ chars)
+  if (/^[a-zA-Z0-9_-]{12,}$/.test(trimmedUrl)) {
+    return { type: "playlist", id: trimmedUrl };
+  } else if (/^[a-zA-Z0-9_-]{10,11}$/.test(trimmedUrl)) {
+    return { type: "video", id: trimmedUrl };
+  }
+
+  return null;
 }
 
 function buildFacebookPagePluginUrl(pageUrl: string) {
@@ -158,6 +174,20 @@ const ProductPage = () => {
                       allowFullScreen
                     />
                   </div>
+                ) : parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl) ? (
+                  <div className="aspect-video overflow-hidden rounded-xl">
+                    <iframe
+                      className="h-full w-full"
+                      src={
+                        parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.type === "playlist"
+                          ? `https://www.youtube-nocookie.com/embed/videoseries?list=${parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.id}&rel=0&modestbranding=1`
+                          : `https://www.youtube-nocookie.com/embed/${parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.id}?rel=0&modestbranding=1`
+                      }
+                      title={`${title} tutorial`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
                 ) : (
                   <div className="aspect-video overflow-hidden rounded-xl bg-muted">
                     <img 
@@ -227,34 +257,95 @@ const ProductPage = () => {
           </section>
         )}
 
-        {!!extractPlaylistId(product.youtubePlaylistUrl) && (
-          <section className="py-14 bg-muted/20">
-            <div className="container mx-auto px-4">
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold text-foreground mb-2">
-                  {lang === "ar" ? "كيفية استخدام التطبيق" : "How to use the app"}
-                </h2>
+        <section className="py-14 bg-muted/20">
+          <div className="container mx-auto px-4">
+            <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                    <Youtube className="h-4 w-4" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-foreground">
+                    {lang === "ar" ? "كيفية استخدام التطبيق" : "How to Use the App"}
+                  </h2>
+                </div>
                 <p className="text-muted-foreground">
                   {lang === "ar"
                     ? "قائمة تشغيل توضح لك كيفية استخدام النظام خطوة بخطوة."
-                    : "A comprehensive video playlist on how to use the system step by step."}
+                    : "A step-by-step video playlist showing you how to get the most out of the system."}
                 </p>
               </div>
+              {parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl) && (
+                <a
+                  href={product.youtubePlaylistUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors shrink-0"
+                >
+                  <Youtube className="h-4 w-4" />
+                  {lang === "ar" ? "فتح على يوتيوب" : "Open on YouTube"}
+                </a>
+              )}
+            </div>
 
+            {parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl) ? (
               <div className="rounded-2xl border border-border bg-card p-4 card-elevated">
                 <div className="aspect-video overflow-hidden rounded-xl bg-muted">
                   <iframe
                     className="h-full w-full"
-                    src={`https://www.youtube-nocookie.com/embed/videoseries?list=${extractPlaylistId(product.youtubePlaylistUrl)}`}
-                    title="How to use playlist"
+                    src={
+                      parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.type === "playlist"
+                        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.id}&rel=0&modestbranding=1`
+                        : `https://www.youtube-nocookie.com/embed/${parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.id}?rel=0&modestbranding=1`
+                    }
+                    title={lang === "ar" ? "كيفية استخدام التطبيق" : "How to use the app"}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
                 </div>
+                {parseYoutubeVideoOrPlaylist(product.youtubePlaylistUrl)?.type === "playlist" && (
+                  <p className="mt-3 text-xs text-muted-foreground text-center">
+                    {lang === "ar"
+                      ? "يمكنك التنقل بين الفيديوهات داخل قائمة التشغيل مباشرةً من المشغّل."
+                      : "Browse all videos in the playlist directly from the player above."}
+                  </p>
+                )}
               </div>
-            </div>
-          </section>
-        )}
+            ) : (
+              <div className="rounded-2xl border border-border bg-card p-8 card-elevated">
+                <div className="flex flex-col items-center justify-center text-center gap-6 py-8">
+                  <div className="relative">
+                    <div className="h-24 w-24 rounded-2xl bg-red-500/10 flex items-center justify-center">
+                      <PlayCircle className="h-12 w-12 text-red-500 opacity-80" />
+                    </div>
+                    <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 flex items-center justify-center">
+                      <Youtube className="h-3 w-3 text-white" />
+                    </div>
+                  </div>
+                  <div className="max-w-sm">
+                    <h3 className="text-lg font-bold text-foreground mb-2">
+                      {lang === "ar" ? "فيديوهات تعليمية قريباً" : "Tutorial Videos Coming Soon"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {lang === "ar"
+                        ? "نعمل على إعداد قائمة تشغيل شاملة لشرح كيفية استخدام النظام. تواصل معنا عبر واتساب لتلقي الدعم الفوري."
+                        : "We're preparing a full tutorial playlist to walk you through every feature. Reach out on WhatsApp for immediate support."}
+                    </p>
+                  </div>
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[hsl(142,70%,45%)] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {lang === "ar" ? "تواصل للدعم الفوري" : "Contact for Instant Support"}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
 
         {!!product.pricingImage?.src && (
           <section className="py-14 bg-muted/40">

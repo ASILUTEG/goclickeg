@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { motion } from "framer-motion";
 import { Globe, Monitor, Smartphone, ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
@@ -51,8 +52,14 @@ const OurServicesSection = () => {
   const [services, setServices] = useState<ServicePreview[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const getImageUrl = (path: string) => {
+    if (!path) return "https://placehold.co/600x400/1e293b/94a3b8?text=Service";
+    if (path.startsWith('data:') || path.startsWith('http')) return path;
+    return `http://localhost:3001/storage/${path}`;
+  };
+
   useEffect(() => {
-    fetch("http://localhost:3001/api/services")
+    fetch(`${API_BASE}/services`)
       .then(r => r.json())
       .then(data => setServices(Array.isArray(data) ? data.filter((s: any) => s.is_active).slice(0, 3) : []))
       .catch(console.error)
@@ -116,7 +123,7 @@ const OurServicesSection = () => {
                   {/* Image */}
                   <div className="relative h-44 overflow-hidden">
                     <img
-                      src={service.mainImage || "https://placehold.co/600x400/1e293b/94a3b8?text=Service"}
+                      src={getImageUrl(service.mainImage)}
                       alt={service.name[lang as 'ar' | 'en']}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={(e) => { (e.currentTarget as HTMLImageElement).src = "https://placehold.co/600x400/1e293b/94a3b8?text=Service"; }}
